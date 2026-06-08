@@ -3,11 +3,11 @@ pipeline {
 
     environment {
         IMAGE_NAME = "bike-showroom"
-        DOCKERHUB_USER = "nikhilabba12"
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
 
-        ACR_NAME = "myacrname"
-        ACR_LOGIN_SERVER = "myacrname.azurecr.io"
+        DOCKERHUB_USER = "nikhilabba12"
+        ACR_NAME = "youracrname"
+        ACR_LOGIN_SERVER = "youracrname.azurecr.io"
     }
 
     stages {
@@ -27,9 +27,14 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 bat """
-                docker build -t %nikhilabba12%/%IMAGE_NAME%:%IMAGE_TAG% .
-                docker tag %nikhilabba12%/%IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_USER%/%IMAGE_NAME%:latest
+                docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
                 """
+            }
+        }
+
+        stage('Show Images') {
+            steps {
+                bat 'docker images'
             }
         }
 
@@ -49,11 +54,20 @@ pipeline {
             }
         }
 
+        stage('Tag For Docker Hub') {
+            steps {
+                bat """
+                docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_USER%/%IMAGE_NAME%:latest
+                docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_USER%/%IMAGE_NAME%:%IMAGE_TAG%
+                """
+            }
+        }
+
         stage('Push To Docker Hub') {
             steps {
                 bat """
-                docker push %nikhilabba12%/%IMAGE_NAME%:%IMAGE_TAG%
-                docker push %nikhilabba12%/%IMAGE_NAME%:latest
+                docker push %DOCKERHUB_USER%/%IMAGE_NAME%:latest
+                docker push %DOCKERHUB_USER%/%IMAGE_NAME%:%IMAGE_TAG%
                 """
             }
         }
@@ -61,8 +75,7 @@ pipeline {
         stage('Tag Image For Azure ACR') {
             steps {
                 bat """
-                docker tag %nikhilabba12%/%IMAGE_NAME%:%IMAGE_TAG% %ACR_LOGIN_SERVER%/%IMAGE_NAME%:%IMAGE_TAG%
-                docker tag %nikhilabba12%/%IMAGE_NAME%:%IMAGE_TAG% %ACR_LOGIN_SERVER%/%IMAGE_NAME%:latest
+                docker tag %IMAGE_NAME%:%IMAGE_TAG% %ACR_LOGIN_SERVER%/%IMAGE_NAME%:%IMAGE_TAG%
                 """
             }
         }
@@ -71,13 +84,14 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'acr-creds',
-                        usernameVariable: 'ACR_USER',
-                        passwordVariable: 'ACR_PASS'
+                        credentialsId: 'azure-creds',
+                        usernameVariable: 'AZURE_USER',
+                        passwordVariable: 'AZURE_PASS'
                     )
                 ]) {
                     bat """
-                    echo %ACR_PASS% | docker login %ACR_LOGIN_SERVER% -u %ACR_USER% --password-stdin
+                    az login -u %AZURE_USER% -p %AZURE_PASS%
+                    az acr login --name %ACR_NAME%
                     """
                 }
             }
@@ -87,12 +101,11 @@ pipeline {
             steps {
                 bat """
                 docker push %ACR_LOGIN_SERVER%/%IMAGE_NAME%:%IMAGE_TAG%
-                docker push %ACR_LOGIN_SERVER%/%IMAGE_NAME%:latest
                 """
             }
         }
 
-        stage('Show Images') {
+        stage('Show Images After Push') {
             steps {
                 bat 'docker images'
             }
